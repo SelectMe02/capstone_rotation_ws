@@ -695,14 +695,14 @@ class Nodelet(Node):
         self.joy_lr = msg.axes[2]
 
     ########################### 6/10 UPDATE (joy)######################################
-        self.joy_r2 = msg.axes[4]
-        self.joy_l2 = msg.axes[5]
+        self.joy_r2 = msg.buttons[7]
+        self.joy_l2 = msg.buttons[6]
         self.joy_stop = msg.buttons[0]
         self.joy_lift_up = msg.buttons[3]
         self.joy_lift_down = msg.buttons[1]
 
-        self.joy_speed_up = msg.buttons[11]
-        self.joy_speed_down = msg.buttons[10]
+        self.joy_speed_up = msg.buttons[9]
+        self.joy_speed_down = msg.buttons[8]
 
         if self.joy_lift_up == 1 and self.joy_lift_up_old==0:
 
@@ -767,19 +767,17 @@ class Nodelet(Node):
         #     self.joy_lr = 0
         #     self.get_logger().info('joy_error')
 
-        EPSILON = 1e-5
-
-        if abs(self.joy_r2 + 1.0) < EPSILON and abs(self.joy_l2 + 1.0) < EPSILON and self.change_mode == 1:
+        if self.joy_r2 == 0 and self.joy_l2 == 0 and self.change_mode == 1:
             self.change_mode = 0
             self.target_pos1 = self.md.pos1
             self.target_pos2 = self.md.pos2
             self.vel_input1 = 0.0
             self.vel_input2 = 0.0
 
-            self.JOY_CONTROL = not self.JOY_CONTROL  ## mode change
+            self.JOY_CONTROL = not self.JOY_CONTROL
             self.get_logger().info(f"{'!!!!!!!!!!!Joystick_control!!!!!!!!!!!!' if self.JOY_CONTROL else '!!!!!!!!!!!!AUTO!!!!!!!!!!!!'}")
 
-        elif abs(self.joy_r2 - 1.0) < EPSILON and abs(self.joy_l2 - 1.0) < EPSILON:
+        elif self.joy_r2 == 1 and self.joy_l2 == 1:
             self.change_mode = 1
             
                   

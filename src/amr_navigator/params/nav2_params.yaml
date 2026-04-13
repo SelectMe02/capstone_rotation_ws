@@ -115,15 +115,16 @@ controller_server:
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.0
     min_theta_velocity_threshold: 0.001
-    progress_checker_plugin: "progress_checker"
-    goal_checker_plugin: "goal_checker"
-    controller_plugins: ["FollowPath"]
+    progress_checker_plugin: ["progress_checker"]
+    goal_checker_plugin: ["goal_checker"]
+    controller_plugins: ["GeneralPath", "ElevatorPath"]
 
     # Progress checker parameters
     progress_checker:
-      plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.15
-      movement_time_allowance: 10.0
+      plugin: "nav2_controller::PoseProgressChecker"
+      required_movement_radius: 0.10
+      required_movement_angle: 0.10
+      movement_time_allowance: 20.0
     # Goal checker parameters
     goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
@@ -131,7 +132,7 @@ controller_server:
       yaw_goal_tolerance: 0.10
       stateful: True
     # DWB parameters
-    FollowPath:
+    GeneralPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: True
       min_vel_x: 0.0
@@ -182,6 +183,73 @@ controller_server:
       RotateToGoal.scale: 8.0
       RotateToGoal.slowing_factor: 8.0
       RotateToGoal.lookahead_time: -1.0
+
+    ElevatorPath:
+      plugin: "nav2_rotation_shim_controller::RotationShimController"
+      angular_dist_threshold: 0.60
+      angular_disengage_threshold: 0.20
+      forward_sampling_distance: 0.20
+      rotate_to_heading_angular_vel: 0.60
+      max_angular_accel: 1.20
+      simulate_ahead_time: 0.80
+      rotate_to_goal_heading: true
+      rotate_to_heading_once: true
+      closed_loop: true
+
+      primary_controller:
+        plugin: "dwb_core::DWBLocalPlanner"
+        debug_trajectory_details: true
+
+        min_vel_x: 0.0
+        max_vel_x: 0.18
+        min_vel_y: 0.0
+        max_vel_y: 0.0
+        max_vel_theta: 0.7
+
+        min_speed_xy: 0.0
+        max_speed_xy: 0.18
+        min_speed_theta: 0.0
+
+        acc_lim_x: 0.8
+        decel_lim_x: -1.0
+        acc_lim_y: 0.0
+        decel_lim_y: 0.0
+        acc_lim_theta: 1.2
+        decel_lim_theta: -1.2
+
+        vx_samples: 24
+        vy_samples: 1
+        vtheta_samples: 32
+        sim_time: 1.2
+        linear_granularity: 0.03
+        angular_granularity: 0.02
+
+        xy_goal_tolerance: 0.08
+        path_length_tolerance: 0.5
+        trans_stopped_velocity: 0.03
+        short_circuit_trajectory_evaluation: true
+        limit_vel_cmd_in_traj: true
+
+        critics: ["RotateToGoal", "Oscillation", "BaseObstacle",
+                  "GoalAlign", "PathAlign", "PathDist", "GoalDist",
+                  "PreferForward"]
+
+        BaseObstacle.scale: 0.06
+
+        PathAlign.scale: 12.0
+        GoalAlign.scale: 10.0
+        PathDist.scale: 28.0
+        GoalDist.scale: 20.0
+
+        PathAlign.forward_point_distance: 0.08
+        GoalAlign.forward_point_distance: 0.08
+
+        RotateToGoal.scale: 20.0
+        RotateToGoal.slowing_factor: 8.0
+        RotateToGoal.lookahead_time: -1.0
+
+        PreferForward.scale: 2.0
+        PreferForward.penalty: 1.2
 
 controller_server_rclcpp_node:
   ros__parameters:
