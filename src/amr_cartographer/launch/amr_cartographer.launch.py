@@ -9,76 +9,111 @@
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 #
 # Author: Darby Lim
+
 import os
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch_ros.actions import Node
-from launch.substitutions import LaunchConfiguration
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import ThisLaunchFileDir
+from launch.substitutions import LaunchConfiguration, ThisLaunchFileDir
+from launch_ros.actions import Node
+
+
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
+
     amr_cartographer_prefix = get_package_share_directory('amr_cartographer')
-    cartographer_config_dir = LaunchConfiguration('cartographer_config_dir', default=os.path.join(
-                                                  amr_cartographer_prefix, 'config'))
-    configuration_basename = LaunchConfiguration('configuration_basename',
-                                                 default='amr.lua')
-    resolution = LaunchConfiguration('resolution', default='0.03') ##0.05
+
+    cartographer_config_dir = LaunchConfiguration(
+        'cartographer_config_dir',
+        default=os.path.join(amr_cartographer_prefix, 'config')
+    )
+
+    configuration_basename = LaunchConfiguration(
+        'configuration_basename',
+        default='amr.lua'
+    )
+
+    resolution = LaunchConfiguration('resolution', default='0.03')
     publish_period_sec = LaunchConfiguration('publish_period_sec', default='1.0')
-    rviz_config_dir = os.path.join(get_package_share_directory('amr_cartographer'),
-                                   'rviz', 'rviz.rviz')
+
+    rviz_config_dir = os.path.join(
+        get_package_share_directory('amr_cartographer'),
+        'rviz',
+        'rviz.rviz'
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'cartographer_config_dir',
             default_value=cartographer_config_dir,
-            description='Full path to config file to load'),
+            description='Full path to config file to load'
+        ),
+
         DeclareLaunchArgument(
             'configuration_basename',
             default_value=configuration_basename,
-            description='Name of lua file for cartographer'),
+            description='Name of lua file for cartographer'
+        ),
+
         DeclareLaunchArgument(
             'use_sim_time',
             default_value='false',
-            description='Use simulation (Gazebo) clock if true'),
+            description='Use simulation (Gazebo) clock if true'
+        ),
+
         Node(
             package='cartographer_ros',
             executable='cartographer_node',
             name='cartographer_node',
             output='screen',
             parameters=[{'use_sim_time': use_sim_time}],
-            arguments=['-configuration_directory', cartographer_config_dir,
-                       '-configuration_basename', configuration_basename],
+            arguments=[
+                '-configuration_directory', cartographer_config_dir,
+                '-configuration_basename', configuration_basename
+            ],
             remappings=[
                 ('scan_1', '/rplidar1/scan'),
                 ('scan_2', '/rplidar2/scan'),
-                ('odom', '/wheel/odometry'),
-                ],           
-            ),
-            
+
+                # 기존: ('odom', '/wheel/odometry')
+                # 변경: EKF가 publish하는 /odom 사용
+                ('odom', '/odom'),
+            ],
+        ),
+
         DeclareLaunchArgument(
             'resolution',
             default_value=resolution,
-            description='Resolution of a grid cell in the published occupancy grid'),
+            description='Resolution of a grid cell in the published occupancy grid'
+        ),
+
         DeclareLaunchArgument(
             'publish_period_sec',
             default_value=publish_period_sec,
-            description='OccupancyGrid publishing period'),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/occupancy_grid.launch.py']),
-            launch_arguments={'use_sim_time': use_sim_time, 'resolution': resolution,
-                              'publish_period_sec': publish_period_sec}.items(),
+            description='OccupancyGrid publishing period'
         ),
+
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                [ThisLaunchFileDir(), '/occupancy_grid.launch.py']
+            ),
+            launch_arguments={
+                'use_sim_time': use_sim_time,
+                'resolution': resolution,
+                'publish_period_sec': publish_period_sec
+            }.items(),
+        ),
+
         Node(
             package='rviz2',
             executable='rviz2',
             name='rviz2',
             arguments=['-d', rviz_config_dir],
             parameters=[{'use_sim_time': use_sim_time}],
-            output='screen'),
+            output='screen'
+        ),
     ])
