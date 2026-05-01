@@ -1,19 +1,6 @@
--- Copyright 2016 The Cartographer Authors
---
--- Licensed under the Apache License, Version 2.0 (the "License");
--- you may not use this file except in compliance with the License.
--- You may obtain a copy of the License at
---
---      http://www.apache.org/licenses/LICENSE-2.0
---
--- Unless required by applicable law or agreed to in writing, software
--- distributed under the License is distributed on an "AS IS" BASIS,
--- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
--- See the License for the specific language governing permissions and
--- limitations under the License.
--- /* Author: Darby Lim */
 include "map_builder.lua"
 include "trajectory_builder.lua"
+
 options = {
   map_builder = MAP_BUILDER,
   trajectory_builder = TRAJECTORY_BUILDER,
@@ -40,14 +27,37 @@ options = {
   imu_sampling_ratio = 1.,
   landmarks_sampling_ratio = 1.,
 }
+
 MAP_BUILDER.use_trajectory_builder_2d = true
+
 TRAJECTORY_BUILDER_2D.min_range = 0.12
-TRAJECTORY_BUILDER_2D.max_range = 25 --기존 3.5
-TRAJECTORY_BUILDER_2D.missing_data_ray_length = 3.
+TRAJECTORY_BUILDER_2D.max_range = 8.
+TRAJECTORY_BUILDER_2D.missing_data_ray_length = 8.
 TRAJECTORY_BUILDER_2D.use_imu_data = false
 TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = true
-TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.1)
-POSE_GRAPH.constraint_builder.min_score = 0.65
-POSE_GRAPH.constraint_builder.global_localization_min_score = 0.7
+TRAJECTORY_BUILDER_2D.motion_filter.max_time_seconds = 0.5
+TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 0.05
+TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.3)
+
+POSE_GRAPH.constraint_builder.min_score = 0.62
+POSE_GRAPH.constraint_builder.global_localization_min_score = 0.67
 -- POSE_GRAPH.optimize_every_n_nodes = 0
+
+-- ===== 여기부터 추가 추천 =====
+
+-- 1. submap을 조금 더 자주 끊어서 복도 재방문 시 왜곡 누적 완화
+TRAJECTORY_BUILDER_2D.submaps.num_range_data = 60
+
+-- 2. 돌아올 때 복도 방향이 살짝 비틀리는 현상 완화
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 300.
+
+-- 3. loop closure / pose graph 최적화를 더 자주 수행
+POSE_GRAPH.optimize_every_n_nodes = 15
+
+-- 4. 재방문 constraint 후보를 더 적극적으로 찾기
+POSE_GRAPH.constraint_builder.sampling_ratio = 0.8
+
+-- 5. odom yaw를 backend에서 너무 세게 믿지 않도록 완화
+POSE_GRAPH.optimization_problem.odometry_rotation_weight = 1e4
+
 return options
