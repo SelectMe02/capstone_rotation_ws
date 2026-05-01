@@ -46,7 +46,8 @@ def generate_launch_description():
 
                 # EKF용 IMU frame/topic
                 'imu_topic_name': '/imu/data',
-                'frame_id': 'base_link',
+                'frame_id': 'imu_link',
+                #'frame_id': 'base_link',
 
                 # IMU의 실제 장착 방향은 URDF의 imu_joint로 보정
                 'use_degrees': True,

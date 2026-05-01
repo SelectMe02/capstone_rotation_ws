@@ -76,7 +76,7 @@ def generate_launch_description():
                 '-configuration_basename', configuration_basename
             ],
             remappings=[
-                ('scan_1', '/rplidar1/scan'),
+                ('scan', '/rplidar1/scan'),
                 ('scan_2', '/rplidar2/scan'),
 
                 # 기존: ('odom', '/wheel/odometry')
