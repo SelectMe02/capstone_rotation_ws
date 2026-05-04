@@ -32,15 +32,15 @@ MAP_BUILDER.use_trajectory_builder_2d = true
 
 TRAJECTORY_BUILDER_2D.min_range = 0.12
 TRAJECTORY_BUILDER_2D.max_range = 6.
-TRAJECTORY_BUILDER_2D.missing_data_ray_length = 8.
+TRAJECTORY_BUILDER_2D.missing_data_ray_length = 6.
 TRAJECTORY_BUILDER_2D.use_imu_data = false
 TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = true
 TRAJECTORY_BUILDER_2D.motion_filter.max_time_seconds = 0.5
 TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 0.05
 TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.3)
 
-POSE_GRAPH.constraint_builder.min_score = 0.62
-POSE_GRAPH.constraint_builder.global_localization_min_score = 0.67
+POSE_GRAPH.constraint_builder.min_score = 0.68
+POSE_GRAPH.constraint_builder.global_localization_min_score = 0.75
 -- POSE_GRAPH.optimize_every_n_nodes = 0
 
 -- ===== 여기부터 추가 추천 =====
@@ -49,15 +49,15 @@ POSE_GRAPH.constraint_builder.global_localization_min_score = 0.67
 TRAJECTORY_BUILDER_2D.submaps.num_range_data = 50
 
 -- 2. 돌아올 때 복도 방향이 살짝 비틀리는 현상 완화
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 300.
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 200.
 
 -- 3. loop closure / pose graph 최적화를 더 자주 수행
-POSE_GRAPH.optimize_every_n_nodes = 15
+POSE_GRAPH.optimize_every_n_nodes = 60
 
 -- 4. 재방문 constraint 후보를 더 적극적으로 찾기
-POSE_GRAPH.constraint_builder.sampling_ratio = 0.8
+POSE_GRAPH.constraint_builder.sampling_ratio = 0.3
 
 -- 5. odom yaw를 backend에서 너무 세게 믿지 않도록 완화
-POSE_GRAPH.optimization_problem.odometry_rotation_weight = 1e3
+POSE_GRAPH.optimization_problem.odometry_rotation_weight = 1e4
 
 return options

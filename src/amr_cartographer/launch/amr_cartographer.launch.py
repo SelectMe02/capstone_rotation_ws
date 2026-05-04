@@ -77,7 +77,8 @@ def generate_launch_description():
             ],
             remappings=[
                 ('scan', '/rplidar1/scan'),
-                ('scan_2', '/rplidar2/scan'),
+                #('scan_1', '/rplidar1/scan'),
+                #('scan_2', '/rplidar2/scan'),
 
                 # 기존: ('odom', '/wheel/odometry')
                 # 변경: EKF가 publish하는 /odom 사용
