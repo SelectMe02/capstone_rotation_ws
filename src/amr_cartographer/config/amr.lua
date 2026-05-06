@@ -43,22 +43,26 @@ MAP_BUILDER.use_trajectory_builder_2d = true
 
 -- 실내 2D LiDAR baseline
 TRAJECTORY_BUILDER_2D.min_range = 0.12
-TRAJECTORY_BUILDER_2D.max_range = 8.
-TRAJECTORY_BUILDER_2D.missing_data_ray_length = 3.
+TRAJECTORY_BUILDER_2D.max_range = 6.
+TRAJECTORY_BUILDER_2D.missing_data_ray_length = 6.
 
 -- IMU는 EKF에서만 사용하고, Cartographer에는 직접 넣지 않음
 TRAJECTORY_BUILDER_2D.use_imu_data = false
 
 -- TurtleBot/실내 2D Cartographer 계열에서 흔히 쓰는 방향
-TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = true
+TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = false
 
 -- 너무 많은 튜닝 대신 기본적인 motion filter만 둠
 TRAJECTORY_BUILDER_2D.motion_filter.max_time_seconds = 0.5
-TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 0.05
-TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.1)
+TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 0.07
+TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.3)
 
 -- submap은 기본 계열에 가깝게
 TRAJECTORY_BUILDER_2D.submaps.num_range_data = 90
+
+-- 복도에서 yaw가 매 scan마다 흔들리지 않도록 회전 prior 강화
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 10.
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 250.
 
 -- TurtleBot 계열에서 자주 쓰는 loop closure 기준
 POSE_GRAPH.optimize_every_n_nodes = 35
