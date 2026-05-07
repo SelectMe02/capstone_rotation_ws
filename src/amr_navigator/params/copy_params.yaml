@@ -1,20 +1,3 @@
-frame_id: map
-waypoints:
-  work_station1:
-    position: {x: 2.4484949111938477, y: -0.3362729549407959, z: 0.0}
-    orientation: {x: 0.0, y: 0.0, z: -0.0689064951300567, w: 0.997623122691576}
-
-  work_station2:
-    position: {x: -0.2876734733581543, y: 1.9826674461364746, z: 0.0}
-    orientation: {x: 0.0, y: 0.0, z: 0.693953007566359, w: 0.7200202936651194}
-
-  work_station3:
-    position: {x: -0.8063347935676575, y: -0.7460460066795349, z: 0.0}
-    orientation: {x: 0.0, y: 0.0, z: 0.9976666263428681, w: 0.06827373346785819}
-
-sequence: [work_station1, work_station2, work_station3]
-
-
 amcl:
   ros__parameters:
     use_sim_time: False
@@ -132,17 +115,16 @@ controller_server:
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.0
     min_theta_velocity_threshold: 0.001
-    progress_checker_plugin: "progress_checker"
+    progress_checker_plugin: ["progress_checker"]
     goal_checker_plugin: ["goal_checker"]
-    controller_plugins: ["GeneralPath"]
+    controller_plugins: ["GeneralPath", "ElevatorPath"]
 
     # Progress checker parameters
     progress_checker:
-      plugin: "nav2_controller::SimpleProgressChecker"
+      plugin: "nav2_controller::PoseProgressChecker"
       required_movement_radius: 0.10
-      movement_time_allowance: 20.0
       required_movement_angle: 0.10
-
+      movement_time_allowance: 20.0
     # Goal checker parameters
     goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
@@ -468,67 +450,32 @@ planner_server_rclcpp_node:
   ros__parameters:
     use_sim_time: False
 
-behavior_server:
+recoveries_server:
   ros__parameters:
-    use_sim_time: False
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
+    recovery_plugins: ["spin", "back_up", "wait"]
+    spin:
+      plugin: "nav2_recoveries/Spin"
+    back_up:
+      plugin: "nav2_recoveries/BackUp"
+    wait:
+      plugin: "nav2_recoveries/Wait"
     global_frame: odom
     robot_base_frame: base_link
     transform_timeout: 0.1
+    use_sim_time: False
     simulate_ahead_time: 2.0
+    # max_rotational_vel: 1.0
+    # min_rotational_vel: 0.4
     max_rotational_vel: 0.5
     min_rotational_vel: 0.1
+    
+    
+    # rotational_acc_lim: 3.2
     rotational_acc_lim: 0.5
-
-    behavior_plugins: ["spin", "backup", "drive_on_heading", "wait"]
-
-    spin:
-      plugin: "nav2_behaviors/Spin"
-    backup:
-      plugin: "nav2_behaviors/BackUp"
-    drive_on_heading:
-      plugin: "nav2_behaviors/DriveOnHeading"
-    wait:
-      plugin: "nav2_behaviors/Wait"
 
 robot_state_publisher:
   ros__parameters:
     use_sim_time: False
-
-velocity_smoother:
-  ros__parameters:
-    use_sim_time: False
-    smoothing_frequency: 20.0
-    scale_velocities: false
-    feedback: "OPEN_LOOP"
-    max_velocity: [0.4, 0.0, 0.35]
-    min_velocity: [0.0, 0.0, -0.35]
-    max_accel: [0.5, 0.0, 0.8]
-    max_decel: [-0.5, 0.0, -0.8]
-    odom_topic: /odom
-    odom_duration: 0.1
-    deadband_velocity: [0.0, 0.0, 0.0]
-    velocity_timeout: 1.0
-
-smoother_server:
-  ros__parameters:
-    use_sim_time: False
-    smoother_plugins: ["simple_smoother"]
-    simple_smoother:
-      plugin: "nav2_smoother::SimpleSmoother"
-      tolerance: 1.0e-10
-      max_its: 1000
-      do_refinement: true
-
-waypoint_follower:
-  ros__parameters:
-    use_sim_time: False
-    loop_rate: 20
-    stop_on_failure: false
-    waypoint_task_executor_plugin: "wait_at_waypoint"
-    wait_at_waypoint:
-      plugin: "nav2_waypoint_follower::WaitAtWaypoint"
-      enabled: True
-      waypoint_pause_duration: 200
