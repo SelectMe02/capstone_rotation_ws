@@ -7,6 +7,8 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, Time
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
+from launch_ros.actions import Node
+
 
 def generate_launch_description():
     serial_launch = os.path.join(
@@ -88,6 +90,22 @@ def generate_launch_description():
         description='ROS log level'
     )
 
+    elevator_floor_node = Node(
+        package='ebimu_pkg',
+        executable='elevator_floor_node',
+        name='elevator_floor_node',
+        output='screen',
+        parameters=[{
+            'imu_topic': '/imu/data',
+            'start_floor': 1,
+            'acc_z_threshold': 0.02,
+            'thresh_count': 30,
+            'window': 0.5,
+            'use_baseline_compensation': True,
+            'baseline_duration': 0.8,
+        }]
+    )
+
     return LaunchDescription([
         declare_map_arg,
         declare_params_file_arg,
@@ -109,7 +127,14 @@ def generate_launch_description():
         ),
 
         TimerAction(
-            period=2.0,
+            period=3.0,
+            actions=[
+                elevator_floor_node
+            ],
+        ),
+
+        TimerAction(
+            period=4.0,
             actions=[
                 IncludeLaunchDescription(
                     PythonLaunchDescriptionSource(lidar_launch)
@@ -118,7 +143,7 @@ def generate_launch_description():
         ),
 
         TimerAction(
-            period=6.0,
+            period=7.0,
             actions=[
                 IncludeLaunchDescription(
                     PythonLaunchDescriptionSource(localization_launch),
@@ -134,7 +159,7 @@ def generate_launch_description():
         ),
 
         TimerAction(
-            period=8.0,
+            period=9.0,
             actions=[
                 IncludeLaunchDescription(
                     PythonLaunchDescriptionSource(navigation_launch),
