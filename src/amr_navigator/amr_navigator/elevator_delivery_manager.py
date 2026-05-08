@@ -1,7 +1,7 @@
 import math
 import os
 import time
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional, List
 
 import yaml
 
@@ -27,14 +27,30 @@ def yaw_to_quaternion(yaw: float) -> Quaternion:
     return q
 
 
+def quaternion_to_yaw(q: Quaternion) -> float:
+    return math.atan2(
+        2.0 * (q.w * q.z + q.x * q.y),
+        1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+    )
+
+
 def normalize_angle(angle: float) -> float:
     return math.atan2(math.sin(angle), math.cos(angle))
+
+
+def pose_distance(a: Dict[str, Any], b: Dict[str, Any]) -> float:
+    dx = float(b['x']) - float(a['x'])
+    dy = float(b['y']) - float(a['y'])
+    return math.hypot(dx, dy)
 
 
 class ElevatorDeliveryManager(Node):
     def __init__(self):
         super().__init__('elevator_delivery_manager')
 
+        # ------------------------------------------------------------
+        # Basic parameters
+        # ------------------------------------------------------------
         self.declare_parameter('waypoint_file', '')
         self.declare_parameter('start_floor', 1)
 
@@ -43,13 +59,118 @@ class ElevatorDeliveryManager(Node):
         self.declare_parameter('elevator_start_topic', '/elevator/start')
         self.declare_parameter('cmd_vel_topic', '/cmd_vel_nav')
 
+        # ------------------------------------------------------------
+        # Door detection parameters
+        # ------------------------------------------------------------
+        
+        self.declare_parameter('approach_door_after_rotate', True)
+        self.declare_parameter('door_wait_distance', 0.60)
+        self.declare_parameter('door_approach_max_distance', 0.60)
+        self.declare_parameter('door_approach_speed', 0.04)
+        self.declare_parameter('door_approach_timeout', 20.0)
+
+
+        self.declare_parameter('door_max_valid_range', 5.0)
+        self.declare_parameter('door_min_valid_count', 8)
+        self.declare_parameter('treat_max_range_as_open', False)
+        # LiDAR scan 기준 문이 정면이면 0.0.
+        # 만약 LiDAR frame에서 정면이 180도라면 실행 시 door_center_deg:=180.0 으로 바꿔야 함.
+        self.declare_parameter('door_center_deg', 180.0)
+
+        # 기존 12도는 너무 좁을 수 있어 기본값을 25도로 넓힘.
+        self.declare_parameter('door_half_width_deg', 8.0)
+
+        # 기존 1.20m는 현장에 따라 너무 클 수 있어 기본값을 0.90m로 낮춤.
+        #self.declare_parameter('door_open_distance', 0.90)
+        self.declare_parameter('door_open_distance', 1.30)
+
+
+        # 기존 0.60은 너무 엄격할 수 있어 기본값을 0.35로 낮춤.
+        self.declare_parameter('door_min_open_ratio', 0.70)
+
+        # 0.1초 루프 기준 8번 연속이면 약 0.8초 동안 open.
+        self.declare_parameter('door_stable_count_required', 20)
+
+        # 수동으로 elevator_inside 근처에 옮겼을 때 door wait를 빠져나오기 위한 반경.
+        self.declare_parameter('already_inside_radius', 0.60)
+
+        # ------------------------------------------------------------
+        # Direct drive parameters for elevator zone
+        # ------------------------------------------------------------
+        self.declare_parameter('boarding_speed', 0.12)
+        self.declare_parameter('exit_speed', 0.12)
+
+        # 0.0이면 waypoints 거리로 자동 계산.
+        # 현장에서 실제 이동거리를 강제로 지정하고 싶으면 예: 1.80
+        self.declare_parameter('boarding_distance_override', 0.0)
+        self.declare_parameter('exit_distance_override', 0.0)
+
+        # 직진 중 정면 장애물이 이 거리보다 가까우면 정지.
+        self.declare_parameter('direct_drive_stop_distance', 0.40)
+        self.declare_parameter('direct_drive_check_obstacle', True)
+
+        # ------------------------------------------------------------
+        # Read parameters
+        # ------------------------------------------------------------
         waypoint_file = str(self.get_parameter('waypoint_file').value)
         self.start_floor = int(self.get_parameter('start_floor').value)
 
-        scan_topic = str(self.get_parameter('scan_topic').value)
-        current_floor_topic = str(self.get_parameter('current_floor_topic').value)
-        elevator_start_topic = str(self.get_parameter('elevator_start_topic').value)
-        cmd_vel_topic = str(self.get_parameter('cmd_vel_topic').value)
+        self.scan_topic = str(self.get_parameter('scan_topic').value)
+        self.current_floor_topic = str(self.get_parameter('current_floor_topic').value)
+        self.elevator_start_topic = str(self.get_parameter('elevator_start_topic').value)
+        self.cmd_vel_topic = str(self.get_parameter('cmd_vel_topic').value)
+
+        self.door_max_valid_range = float(
+            self.get_parameter('door_max_valid_range').value
+        )
+        self.door_min_valid_count = int(
+            self.get_parameter('door_min_valid_count').value
+        )
+        self.treat_max_range_as_open = bool(
+            self.get_parameter('treat_max_range_as_open').value
+        )
+
+        self.approach_door_after_rotate = bool(
+            self.get_parameter('approach_door_after_rotate').value
+        )
+        self.door_wait_distance = float(
+            self.get_parameter('door_wait_distance').value
+        )
+        self.door_approach_max_distance = float(
+            self.get_parameter('door_approach_max_distance').value
+        )
+        self.door_approach_speed = float(
+            self.get_parameter('door_approach_speed').value
+        )
+        self.door_approach_timeout = float(
+            self.get_parameter('door_approach_timeout').value
+        )
+
+        self.door_center_deg = float(self.get_parameter('door_center_deg').value)
+        self.door_half_width_deg = float(self.get_parameter('door_half_width_deg').value)
+        self.door_open_distance = float(self.get_parameter('door_open_distance').value)
+        self.door_min_open_ratio = float(self.get_parameter('door_min_open_ratio').value)
+        self.door_stable_count_required = int(
+            self.get_parameter('door_stable_count_required').value
+        )
+        self.already_inside_radius = float(
+            self.get_parameter('already_inside_radius').value
+        )
+
+        self.boarding_speed = float(self.get_parameter('boarding_speed').value)
+        self.exit_speed = float(self.get_parameter('exit_speed').value)
+        self.boarding_distance_override = float(
+            self.get_parameter('boarding_distance_override').value
+        )
+        self.exit_distance_override = float(
+            self.get_parameter('exit_distance_override').value
+        )
+        self.direct_drive_stop_distance = float(
+            self.get_parameter('direct_drive_stop_distance').value
+        )
+        self.direct_drive_check_obstacle = bool(
+            self.get_parameter('direct_drive_check_obstacle').value
+        )
 
         if not waypoint_file:
             waypoint_file = os.path.join(
@@ -61,26 +182,43 @@ class ElevatorDeliveryManager(Node):
         with open(waypoint_file, 'r') as f:
             self.wp = yaml.safe_load(f)
 
-        self.scan = None
-        self.current_floor = None
+        # ------------------------------------------------------------
+        # Runtime state
+        # ------------------------------------------------------------
+        self.scan: Optional[LaserScan] = None
+        self.current_floor: Optional[int] = None
+        self.current_pose = None
 
+        # ------------------------------------------------------------
+        # Subscribers
+        # ------------------------------------------------------------
         self.create_subscription(
             LaserScan,
-            scan_topic,
+            self.scan_topic,
             self.scan_callback,
             10
         )
 
         self.create_subscription(
             Int32,
-            current_floor_topic,
+            self.current_floor_topic,
             self.floor_callback,
             10
         )
 
+        self.create_subscription(
+            PoseWithCovarianceStamped,
+            '/amcl_pose',
+            self.amcl_pose_callback,
+            10
+        )
+
+        # ------------------------------------------------------------
+        # Publishers
+        # ------------------------------------------------------------
         self.elevator_start_pub = self.create_publisher(
             Int32,
-            elevator_start_topic,
+            self.elevator_start_topic,
             10
         )
 
@@ -92,10 +230,13 @@ class ElevatorDeliveryManager(Node):
 
         self.cmd_vel_pub = self.create_publisher(
             Twist,
-            cmd_vel_topic,
+            self.cmd_vel_topic,
             10
         )
 
+        # ------------------------------------------------------------
+        # Clients
+        # ------------------------------------------------------------
         self.nav_client = ActionClient(
             self,
             NavigateToPose,
@@ -118,13 +259,17 @@ class ElevatorDeliveryManager(Node):
         )
 
         self.get_logger().info(
-            f"ElevatorDeliveryManager ready. "
+            "ElevatorDeliveryManager ready. "
             f"waypoint_file={waypoint_file}, "
             f"start_floor={self.start_floor}, "
-            f"scan_topic={scan_topic}, "
-            f"current_floor_topic={current_floor_topic}, "
-            f"elevator_start_topic={elevator_start_topic}, "
-            f"cmd_vel_topic={cmd_vel_topic}"
+            f"scan_topic={self.scan_topic}, "
+            f"cmd_vel_topic={self.cmd_vel_topic}, "
+            f"door_center_deg={self.door_center_deg}, "
+            f"door_half_width_deg={self.door_half_width_deg}, "
+            f"door_open_distance={self.door_open_distance}, "
+            f"door_min_open_ratio={self.door_min_open_ratio}, "
+            f"boarding_speed={self.boarding_speed}, "
+            f"exit_speed={self.exit_speed}"
         )
 
     # ------------------------------------------------------------------
@@ -135,6 +280,9 @@ class ElevatorDeliveryManager(Node):
 
     def floor_callback(self, msg: Int32):
         self.current_floor = int(msg.data)
+
+    def amcl_pose_callback(self, msg: PoseWithCovarianceStamped):
+        self.current_pose = msg.pose.pose
 
     # ------------------------------------------------------------------
     # YAML helpers
@@ -231,6 +379,16 @@ class ElevatorDeliveryManager(Node):
             self.initialpose_pub.publish(msg)
             rclpy.spin_once(self, timeout_sec=0.1)
 
+    def is_close_to_pose(self, pose_dict: Dict[str, Any], radius: float) -> bool:
+        if self.current_pose is None:
+            return False
+
+        dx = self.current_pose.position.x - float(pose_dict['x'])
+        dy = self.current_pose.position.y - float(pose_dict['y'])
+        dist = math.hypot(dx, dy)
+
+        return dist <= radius
+
     def load_map(self, map_yaml_name: str) -> bool:
         map_path = os.path.join(
             get_package_share_directory('amr_navigator'),
@@ -321,17 +479,16 @@ class ElevatorDeliveryManager(Node):
         return False
 
     # ------------------------------------------------------------------
-    # Elevator door by LiDAR
+    # Door detection by LiDAR
     # ------------------------------------------------------------------
-    def is_door_open(
+    def get_sector_ranges(
         self,
-        center_deg: float = 0.0,
-        half_width_deg: float = 12.0,
-        open_distance: float = 1.20,
-        min_open_ratio: float = 0.60
-    ) -> bool:
+        center_deg: float,
+        half_width_deg: float,
+        count_inf_as_max: bool = False
+    ) -> List[float]:
         if self.scan is None:
-            return False
+            return []
 
         scan = self.scan
         center = math.radians(center_deg)
@@ -340,26 +497,103 @@ class ElevatorDeliveryManager(Node):
         selected = []
 
         for i, r in enumerate(scan.ranges):
-            if not math.isfinite(r):
-                continue
-
             angle = scan.angle_min + i * scan.angle_increment
             diff = normalize_angle(angle - center)
 
-            if abs(diff) <= half_width:
-                if scan.range_min <= r <= scan.range_max:
-                    selected.append(r)
+            if abs(diff) > half_width:
+                continue
 
-        if len(selected) < 5:
-            return False
+            if math.isnan(r):
+                continue
 
-        open_count = sum(1 for r in selected if r > open_distance)
-        ratio = open_count / len(selected)
+            # 핵심 수정:
+            # inf 또는 max range는 "문 열림" 증거로 쓰지 않음.
+            if math.isinf(r):
+                if count_inf_as_max and self.treat_max_range_as_open:
+                    selected.append(float(scan.range_max))
+                continue
 
-        return ratio >= min_open_ratio
+            if r < scan.range_min:
+                continue
 
-    def wait_until_door_open(self, label: str = 'door') -> bool:
-        self.get_logger().info(f"Waiting until {label} opens...")
+            # 40.0 같은 max range 값은 문 열림 증거가 아니라
+            # 유효하지 않은 값으로 처리.
+            if r >= self.door_max_valid_range:
+                continue
+
+            if r > scan.range_max:
+                continue
+
+            selected.append(float(r))
+
+        return selected
+
+    def get_door_stats(self) -> Dict[str, Any]:
+        values = self.get_sector_ranges(
+            center_deg=self.door_center_deg,
+            half_width_deg=self.door_half_width_deg,
+            count_inf_as_max=False
+        )
+
+        if len(values) < self.door_min_valid_count:
+            return {
+                'valid_count': len(values),
+                'min': None,
+                'median': None,
+                'max': None,
+                'open_count': 0,
+                'open_ratio': 0.0,
+                'is_open': False,
+            }
+
+        sorted_values = sorted(values)
+        n = len(sorted_values)
+
+        median = sorted_values[n // 2]
+        min_v = sorted_values[0]
+        max_v = sorted_values[-1]
+
+        open_count = sum(
+            1 for v in sorted_values
+            if v >= self.door_open_distance
+        )
+        open_ratio = open_count / float(n)
+
+        # 문 열림 조건을 엄격하게 변경:
+        # 유효한 finite range가 충분히 있어야 하고,
+        # 그중 상당수가 open_distance 이상이어야 함.
+        is_open = (
+            n >= self.door_min_valid_count
+            and open_ratio >= self.door_min_open_ratio
+            and median >= self.door_open_distance
+        )
+
+        return {
+            'valid_count': n,
+            'min': min_v,
+            'median': median,
+            'max': max_v,
+            'open_count': open_count,
+            'open_ratio': open_ratio,
+            'is_open': is_open,
+        }
+
+    def is_door_open(self) -> bool:
+        stats = self.get_door_stats()
+        return bool(stats['is_open'])
+
+    def wait_until_door_open(
+        self,
+        label: str = 'door',
+        already_inside_pose: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        self.get_logger().info(
+            f"Waiting until {label} opens... "
+            f"door_center_deg={self.door_center_deg}, "
+            f"door_half_width_deg={self.door_half_width_deg}, "
+            f"door_open_distance={self.door_open_distance}, "
+            f"door_min_open_ratio={self.door_min_open_ratio}"
+        )
 
         stable_count = 0
         last_log_time = time.time()
@@ -367,34 +601,239 @@ class ElevatorDeliveryManager(Node):
         while rclpy.ok():
             rclpy.spin_once(self, timeout_sec=0.1)
 
-            if self.is_door_open():
+            # 디버깅 중 수동으로 elevator_inside 근처로 옮긴 경우,
+            # door wait에 계속 갇히지 않도록 탈출.
+            if already_inside_pose is not None:
+                if self.is_close_to_pose(already_inside_pose, self.already_inside_radius):
+                    self.get_logger().info(
+                        f"Robot is already near elevator_inside. "
+                        f"Skip waiting for {label}."
+                    )
+                    return True
+
+            stats = self.get_door_stats()
+
+            if stats['is_open']:
                 stable_count += 1
             else:
                 stable_count = 0
 
-            if stable_count >= 10:
-                self.get_logger().info(f"{label} opened.")
+            if stable_count >= self.door_stable_count_required:
+                self.get_logger().info(
+                    f"{label} opened. "
+                    f"valid={stats['valid_count']}, "
+                    f"min={stats['min']}, "
+                    f"median={stats['median']}, "
+                    f"max={stats['max']}, "
+                    f"open_ratio={stats['open_ratio']:.2f}"
+                )
                 return True
 
             now = time.time()
-            if now - last_log_time > 5.0:
-                self.get_logger().info(f"Still waiting for {label}...")
+            if now - last_log_time > 1.0:
+                self.get_logger().info(
+                    f"Still waiting for {label}... "
+                    f"valid={stats['valid_count']}, "
+                    f"min={stats['min']}, "
+                    f"median={stats['median']}, "
+                    f"max={stats['max']}, "
+                    f"open_ratio={stats['open_ratio']:.2f}, "
+                    f"stable_count={stable_count}/{self.door_stable_count_required}"
+                )
                 last_log_time = now
 
         return False
+
+    # ------------------------------------------------------------------
+    # Direct drive inside elevator zone
+    # ------------------------------------------------------------------
+    def get_front_min_distance(self) -> Optional[float]:
+        values = self.get_sector_ranges(
+            center_deg=self.door_center_deg,
+            half_width_deg=10.0,
+            count_inf_as_max=False
+        )
+
+        if not values:
+            return None
+
+        return min(values)
+
+    def stop_robot(self, repeat: int = 20):
+        stop = Twist()
+        for _ in range(repeat):
+            self.cmd_vel_pub.publish(stop)
+            rclpy.spin_once(self, timeout_sec=0.05)
+
+    def drive_straight_simple(
+        self,
+        distance_m: float,
+        speed_mps: float,
+        label: str,
+        check_obstacle: Optional[bool] = None
+    ) -> bool:
+        if check_obstacle is None:
+            check_obstacle = self.direct_drive_check_obstacle
+
+        if abs(speed_mps) < 1.0e-6:
+            self.get_logger().error("speed_mps is zero. Cannot drive.")
+            return False
+
+        direction = 1.0 if distance_m >= 0.0 else -1.0
+        speed = abs(speed_mps) * direction
+        duration = abs(distance_m) / abs(speed_mps)
+
+        self.get_logger().info(
+            f"{label}: direct drive start. "
+            f"distance={distance_m:.3f} m, speed={speed:.3f} m/s, duration={duration:.2f} s"
+        )
+
+        twist = Twist()
+        twist.linear.x = speed
+
+        start = time.time()
+
+        while rclpy.ok() and (time.time() - start) < duration:
+            if check_obstacle:
+                front_min = self.get_front_min_distance()
+
+                if front_min is None:
+                    self.stop_robot()
+                    self.get_logger().error(
+                        f"{label}: no valid front scan during direct drive. Stop for safety."
+                    )
+                    return False
+
+                if front_min < self.direct_drive_stop_distance:
+                    self.stop_robot()
+                    self.get_logger().error(
+                        f"{label}: obstacle too close during direct drive. "
+                        f"front_min={front_min:.3f}, "
+                        f"stop_distance={self.direct_drive_stop_distance:.3f}"
+                    )
+                    return False
+
+            self.cmd_vel_pub.publish(twist)
+            rclpy.spin_once(self, timeout_sec=0.05)
+
+        self.stop_robot()
+        self.get_logger().info(f"{label}: direct drive done.")
+        return True
+    
+    def approach_door_until_wait_distance(self, label: str = 'Approach elevator door') -> bool:
+            """
+            180도 회전 후 엘리베이터 문을 잘 인식할 수 있도록
+            문 쪽으로 천천히 접근한다.
+
+            정지 조건:
+            1. door sector median이 door_wait_distance 이하가 됨
+            2. direct_drive_stop_distance 이하로 너무 가까워짐
+            3. door_approach_max_distance만큼 이동함
+            4. timeout
+            """
+            self.get_logger().info(
+                f"{label}: start. "
+                f"target door_wait_distance={self.door_wait_distance:.2f} m, "
+                f"max_distance={self.door_approach_max_distance:.2f} m, "
+                f"speed={self.door_approach_speed:.2f} m/s"
+            )
+
+            if self.door_approach_speed <= 0.0:
+                self.get_logger().error("door_approach_speed must be positive.")
+                return False
+
+            moved_distance = 0.0
+            start_time = time.time()
+            last_log_time = time.time()
+
+            twist = Twist()
+            twist.linear.x = self.door_approach_speed
+
+            while rclpy.ok():
+                now = time.time()
+                elapsed = now - start_time
+
+                if elapsed > self.door_approach_timeout:
+                    self.stop_robot()
+                    self.get_logger().warning(
+                        f"{label}: timeout. moved_distance={moved_distance:.2f} m"
+                    )
+                    return True
+
+                moved_distance = elapsed * self.door_approach_speed
+
+                if moved_distance >= self.door_approach_max_distance:
+                    self.stop_robot()
+                    self.get_logger().info(
+                        f"{label}: reached max approach distance. "
+                        f"moved_distance={moved_distance:.2f} m"
+                    )
+                    return True
+
+                stats = self.get_door_stats()
+                median = stats.get('median', None)
+                min_v = stats.get('min', None)
+
+                # 유효한 문 방향 scan이 있는 경우
+                if median is not None:
+                    # 너무 가까우면 안전 정지
+                    if min_v is not None and min_v <= self.direct_drive_stop_distance:
+                        self.stop_robot()
+                        self.get_logger().info(
+                            f"{label}: stop because min distance is close. "
+                            f"min={min_v:.3f}, stop_distance={self.direct_drive_stop_distance:.3f}"
+                        )
+                        return True
+
+                    # 문 인식 대기 위치에 도달
+                    if median <= self.door_wait_distance:
+                        self.stop_robot()
+                        self.get_logger().info(
+                            f"{label}: reached door wait distance. "
+                            f"median={median:.3f}, target={self.door_wait_distance:.3f}"
+                        )
+                        return True
+
+                self.cmd_vel_pub.publish(twist)
+                rclpy.spin_once(self, timeout_sec=0.05)
+
+                if now - last_log_time > 1.0:
+                    self.get_logger().info(
+                        f"{label}: approaching... "
+                        f"moved={moved_distance:.2f} m, "
+                        f"median={median}, min={min_v}"
+                    )
+                    last_log_time = now
+
+            self.stop_robot()
+            return False
+
+    def rotate_180_simple(self, angular_z: float = 0.35, duration_sec: float = 9.0):
+        self.get_logger().info("Rotate 180 deg")
+
+        twist = Twist()
+        twist.angular.z = float(angular_z)
+
+        start = time.time()
+        while rclpy.ok() and time.time() - start < duration_sec:
+            self.cmd_vel_pub.publish(twist)
+            rclpy.spin_once(self, timeout_sec=0.05)
+
+        self.stop_robot()
+        self.get_logger().info("Rotate 180 deg done.")
 
     # ------------------------------------------------------------------
     # Elevator floor estimator control
     # ------------------------------------------------------------------
     def start_elevator_floor_estimation(self, target_floor: int):
         self.get_logger().info(
-            f"Notify elevator_floor_node: start_floor={self.start_floor}, target_floor={target_floor}"
+            f"Notify elevator_floor_node: start_floor={self.start_floor}, "
+            f"target_floor={target_floor}"
         )
 
         msg = Int32()
         msg.data = int(target_floor)
 
-        # floor node가 확실히 받을 수 있도록 여러 번 publish
         for _ in range(15):
             self.elevator_start_pub.publish(msg)
             rclpy.spin_once(self, timeout_sec=0.1)
@@ -419,33 +858,6 @@ class ElevatorDeliveryManager(Node):
                 last_log_time = now
 
         return False
-
-    # ------------------------------------------------------------------
-    # Simple rotation
-    # ------------------------------------------------------------------
-    def rotate_180_simple(self, angular_z: float = 0.35, duration_sec: float = 9.0):
-        """
-        초기 테스트용 open-loop 180도 회전.
-        angular_z=0.35 rad/s 기준 pi rad 회전에 약 9초.
-
-        나중에 odom yaw 기반 closed-loop 회전으로 바꾸는 것이 더 정확합니다.
-        """
-        self.get_logger().info("Rotate 180 deg")
-
-        twist = Twist()
-        twist.angular.z = float(angular_z)
-
-        start = time.time()
-        while rclpy.ok() and time.time() - start < duration_sec:
-            self.cmd_vel_pub.publish(twist)
-            rclpy.spin_once(self, timeout_sec=0.05)
-
-        stop = Twist()
-        for _ in range(20):
-            self.cmd_vel_pub.publish(stop)
-            rclpy.spin_once(self, timeout_sec=0.05)
-
-        self.get_logger().info("Rotate 180 deg done.")
 
     # ------------------------------------------------------------------
     # Utility
@@ -491,24 +903,50 @@ class ElevatorDeliveryManager(Node):
             self.go_to_pose(room['pose'], f"room {room_number}")
             return
 
-        # 1층 엘리베이터 앞까지 이동
+        # 1층 엘리베이터 앞까지는 Nav2로 이동
         if not self.go_to_pose(floor1['elevator_front'], '1F elevator_front'):
             return
 
-        # 1층 엘리베이터 문 열림 대기
-        if not self.wait_until_door_open('1F elevator door'):
+        # 문 열림 대기
+        if not self.wait_until_door_open(
+            '1F elevator door',
+            already_inside_pose=floor1['elevator_inside']
+        ):
             return
 
-        # 엘리베이터 안으로 진입
-        if not self.go_to_pose(floor1['elevator_inside'], '1F elevator_inside'):
-            return
+        # elevator_front -> elevator_inside는 Nav2가 아니라 저속 직진으로 처리
+        if self.is_close_to_pose(floor1['elevator_inside'], self.already_inside_radius):
+            self.get_logger().info("Already inside elevator. Skip boarding direct drive.")
+        else:
+            if self.boarding_distance_override > 0.0:
+                boarding_distance = self.boarding_distance_override
+            else:
+                boarding_distance = pose_distance(
+                    floor1['elevator_front'],
+                    floor1['elevator_inside']
+                )
 
-        # 층수 추정 시작.
-        # 사용자가 302를 입력했다면 target_floor=3이 publish됩니다.
+            if not self.drive_straight_simple(
+                boarding_distance,
+                self.boarding_speed,
+                'Boarding elevator'
+            ):
+                return
+
+        # 실제로 엘리베이터 안에 들어간 뒤 현재 pose를 1층 elevator_inside로 보정
+        self.publish_initial_pose(floor1['elevator_inside'])
+        self.spin_sleep(1.0)
+
+        # 층수 추정 시작
         self.start_elevator_floor_estimation(target_floor)
 
         # 문을 바라보도록 180도 회전
         self.rotate_180_simple()
+
+        # 180도 회전 후 문 인식이 잘 되는 위치까지 조금 전진
+        if self.approach_door_after_rotate:
+            if not self.approach_door_until_wait_distance('Approach door after 180 rotation'):
+                return
 
         # 목적 층 도착 대기
         if not self.wait_until_target_floor(target_floor):
@@ -526,12 +964,26 @@ class ElevatorDeliveryManager(Node):
         self.publish_initial_pose(target_floor_info['elevator_inside'])
         self.spin_sleep(2.0)
 
-        # 엘리베이터 밖으로 나감
-        if not self.go_to_pose(
-            target_floor_info['elevator_exit'],
-            f'{target_floor}F elevator_exit'
+        # 목적 층 elevator_inside -> elevator_exit도 Nav2 대신 저속 직진
+        if self.exit_distance_override > 0.0:
+            exit_distance = self.exit_distance_override
+        else:
+            exit_distance = pose_distance(
+                target_floor_info['elevator_inside'],
+                target_floor_info['elevator_exit']
+            )
+
+        if not self.drive_straight_simple(
+            exit_distance,
+            self.exit_speed,
+            f'Exit elevator at {target_floor}F'
         ):
             return
+
+        # 엘리베이터 밖으로 나온 뒤 pose를 elevator_exit로 보정하고 costmap clear
+        self.publish_initial_pose(target_floor_info['elevator_exit'])
+        self.clear_costmaps()
+        self.spin_sleep(2.0)
 
         # 목적 호수로 이동
         if not self.go_to_pose(room['pose'], f'room {room_number}'):
