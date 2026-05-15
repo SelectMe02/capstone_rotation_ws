@@ -1,4 +1,27 @@
 maps:
+  B1:
+    map_yaml: "ff_ekf_B1.yaml"
+
+    elevator_inside_for_btn_clk:
+      x: -3.4667
+      y: 5.6867
+      yaw: 1.3901
+
+    elevator_align_for_exit:
+      x: -4.0855
+      y: 5.5501
+      yaw: -1.6867
+
+    elevator_exit:
+      x: -4.0446
+      y: 2.9403
+      yaw: -1.5552
+
+    destination:
+      x: -7.1016
+      y: 2.1829
+      yaw: -3.1021
+
   1:
     map_yaml: "ff_ekf_1f.yaml"
 

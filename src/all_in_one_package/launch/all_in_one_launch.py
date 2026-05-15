@@ -45,7 +45,7 @@ def generate_launch_description():
     default_map_yaml = os.path.join(
         get_package_share_directory('amr_navigator'),
         'map',
-        'ff_ekf_1f.yaml'
+        'ff_ekf_B1.yaml'
     )
 
     default_params_file = os.path.join(
@@ -63,7 +63,7 @@ def generate_launch_description():
     declare_map_arg = DeclareLaunchArgument(
         'map',
         default_value=default_map_yaml,
-        description='Full path to the map yaml file. Default is ff_ekf_1f.yaml'
+        description='Full path to the map yaml file. Default is ff_ekf_B1.yaml'
     )
 
     declare_params_file_arg = DeclareLaunchArgument(
