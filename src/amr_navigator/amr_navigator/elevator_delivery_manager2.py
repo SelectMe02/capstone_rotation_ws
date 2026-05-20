@@ -108,9 +108,9 @@ class ElevatorDeliveryManager2(Node):
         # ------------------------------------------------------------
         # Direct / forced drive parameters
         # ------------------------------------------------------------
-        self.declare_parameter('boarding_speed', 0.20)
-        self.declare_parameter('forced_move_speed', 0.18)
-        self.declare_parameter('exit_speed', 0.20)
+        self.declare_parameter('boarding_speed', 0.18)
+        self.declare_parameter('forced_move_speed', 0.16)
+        self.declare_parameter('exit_speed', 0.18)
         self.declare_parameter('rotate_speed', 0.35)
 
         # 0.0이면 waypoint 거리로 자동 계산.
