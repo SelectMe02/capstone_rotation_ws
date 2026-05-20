@@ -97,7 +97,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'imu_topic': '/imu/data',
-            'start_floor': 1,
+            'start_floor': 3,
             'acc_z_threshold': 0.02,
             'thresh_count': 30,
             'window': 0.5,

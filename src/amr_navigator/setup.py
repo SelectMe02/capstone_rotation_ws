@@ -53,7 +53,7 @@ setup(
             'x_waypoint_node = amr_navigator.x_waypoint_follower_client:main',
             'yaml_waypoint_node = amr_navigator.yaml_waypoint_follower:main',
             'elevator_delivery_manager = amr_navigator.elevator_delivery_manager:main',
-
+            'elevator_delivery_manager2 = amr_navigator.elevator_delivery_manager2:main',
         ],
     },
 )
