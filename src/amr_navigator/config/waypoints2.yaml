@@ -27,11 +27,11 @@ maps:
 
     elevator_front:
       x: 43.3255
-      y: -3.0070
+      y: -2.9070
       yaw: -0.0056
 
     elevator_inside:
-      x: 44.9970
+      x: 45.1970
       y: -3.0044
       yaw: 0.1049
 

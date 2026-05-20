@@ -113,10 +113,15 @@ class ElevatorDeliveryManager2(Node):
         self.declare_parameter('exit_speed', 0.18)
         self.declare_parameter('rotate_speed', 0.35)
 
+        # elevator_btn_front -> elevator_front 강제 이동 파라미터
+        self.declare_parameter('front_approach_speed', 0.18)
+        self.declare_parameter('front_approach_distance_override', 0.0)
+
         # 0.0이면 waypoint 거리로 자동 계산.
         # 현장에서 실제 이동거리를 강제로 지정하고 싶으면 예: 1.80
         self.declare_parameter('boarding_distance_override', 0.0)
         self.declare_parameter('exit_distance_override', 0.0)
+
 
         # 강제 이동은 Nav2가 아니라 cmd_vel open-loop 제어이다.
         # forced_drive_check_obstacle=False이면 장애물 검사 없이 지정 거리만큼 이동한다.
@@ -159,6 +164,15 @@ class ElevatorDeliveryManager2(Node):
         self.forced_move_speed = float(self.get_parameter('forced_move_speed').value)
         self.exit_speed = float(self.get_parameter('exit_speed').value)
         self.rotate_speed = float(self.get_parameter('rotate_speed').value)
+
+        self.front_approach_speed = float(
+            self.get_parameter('front_approach_speed').value
+        )
+        
+        self.front_approach_distance_override = float(
+            self.get_parameter('front_approach_distance_override').value
+        )
+
 
         self.boarding_distance_override = float(self.get_parameter('boarding_distance_override').value)
         self.exit_distance_override = float(self.get_parameter('exit_distance_override').value)
@@ -946,13 +960,30 @@ class ElevatorDeliveryManager2(Node):
             return
 
         # 3) elevator_btn_front에서 10초 대기 후 elevator_front로 이동
+        # 3) elevator_btn_front에서 10초 대기 후 elevator_front로 강제 이동
         self.get_logger().info(
             f'Arrived at elevator_btn_front. Wait {self.front_button_wait_sec:.1f} sec.'
         )
         self.spin_sleep(self.front_button_wait_sec)
 
-        if not self.go_to_pose(elevator_front, f'{self.start_floor}F elevator_front'):
+        # elevator_btn_front -> elevator_front도 Nav2가 아니라 cmd_vel 강제 이동으로 처리
+        if not self.force_move_between_waypoints(
+            elevator_btn_front,
+            elevator_front,
+            'Forced approach: elevator_btn_front -> elevator_front',
+            self.front_approach_speed,
+            distance_override=self.front_approach_distance_override,
+            check_obstacle=self.forced_drive_check_obstacle
+        ):
             return
+
+        # self.get_logger().info(
+        #     f'Arrived at elevator_btn_front. Wait {self.front_button_wait_sec:.1f} sec.'
+        # )
+        # self.spin_sleep(self.front_button_wait_sec)
+
+        # if not self.go_to_pose(elevator_front, f'{self.start_floor}F elevator_front'):
+        #     return
 
         # 4) 3층 엘리베이터 문 열림 대기
         if not self.wait_until_door_open(
