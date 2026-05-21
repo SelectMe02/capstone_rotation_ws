@@ -1,3 +1,4 @@
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'camera_perception_pkg'
@@ -10,6 +11,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -27,6 +29,7 @@ setup(
             'yolov8_node = camera_perception_pkg.yolov8_node:main',
             'yolov8_debug_node = camera_perception_pkg.yolov8_debug_node:main',
             'object_distance_node = camera_perception_pkg.object_distance_node:main',
+            'yolo_bbox_visualizer = camera_perception_pkg.yolo_bbox_visualizer:main',
         ],
     },
 )
