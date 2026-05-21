@@ -1007,6 +1007,9 @@ class ElevatorDeliveryManager2(Node):
                 check_obstacle=self.forced_drive_check_obstacle
             ):
                 return
+            
+        # 5-1) elevator_inside에 도착하면 즉시 층수 추정 노드 시작
+        self.start_elevator_floor_estimation(self.target_floor_signal)
 
         # 6) elevator_inside -> elevator_btn_inside: 강제 이동
         if not self.force_move_between_waypoints(
@@ -1024,8 +1027,6 @@ class ElevatorDeliveryManager2(Node):
         )
         self.spin_sleep(self.inside_button_wait_sec)
 
-        # 8) 층수 추정 노드에 목표층 0(B1)을 알림
-        self.start_elevator_floor_estimation(self.target_floor_signal)
 
         # 9) elevator_btn_inside -> elevator_inside_for_exit: 강제 이동
         if not self.force_move_between_waypoints(

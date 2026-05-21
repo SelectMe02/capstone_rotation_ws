@@ -22,8 +22,11 @@ maps:
 
     elevator_btn_front:
       x: 43.3255
-      y: -3.7549
-      yaw: 0.3480
+      y: -3.3549
+      yaw: 0.0530
+      # x: 43.3255
+      # y: -3.7549
+      # yaw: 0.3480
 
     elevator_front:
       x: 43.3255
