@@ -55,6 +55,26 @@ def generate_launch_description():
     )
 
     # =========================================================
+    # 3-1. YOLOv8 bbox visualizer node
+    # Equivalent command:
+    # ros2 run camera_perception_pkg yolo_bbox_visualizer
+    # =========================================================
+    yolo_bbox_visualizer_node = Node(
+        package='camera_perception_pkg',
+        executable='yolo_bbox_visualizer',
+        name='yolo_bbox_visualizer',
+        output='screen',
+        parameters=[
+            {
+                'image_topic': '/camera/camera/color/image_raw',
+                'detections_topic': '/detections',
+                'annotated_topic': '/yolov8/annotated_image',
+                'min_score': 0.3,
+            }
+        ]
+    )
+
+    # =========================================================
     # 4. Object distance node
     # Equivalent command:
     # ros2 run camera_perception_pkg object_distance_node --ros-args \
@@ -108,6 +128,13 @@ def generate_launch_description():
             period=5.0,
             actions=[
                 yolov8_node
+            ]
+        ),
+
+        TimerAction(
+            period=6.0,
+            actions=[
+                yolo_bbox_visualizer_node
             ]
         ),
 
