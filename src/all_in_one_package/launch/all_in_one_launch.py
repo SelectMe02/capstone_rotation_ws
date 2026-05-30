@@ -45,7 +45,7 @@ def generate_launch_description():
     default_map_yaml = os.path.join(
         get_package_share_directory('amr_navigator'),
         'map',
-        'ff_ekf_3f.yaml'
+        'indoor_map_final.yaml'
     )
 
     default_params_file = os.path.join(
